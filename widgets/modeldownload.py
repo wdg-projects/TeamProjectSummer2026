@@ -1,15 +1,15 @@
 from typing import override
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QDialog, QLabel, QProgressBar, QPushButton, QWidget
+from PyQt6.QtWidgets import QDialog, QLabel, QProgressBar, QPushButton, QWidget
 
+from common_utils import TypedSignal, typed_signal, typed_slot
 from services.ollama_adapter import ModelPullTask, PullProgress
 
-from .uiutils import common_ui_loader, preload_ui, load_and_apply_ui, SOURCE_FIELD
+from .uiutils import preload_ui, load_and_apply_ui, SOURCE_FIELD
 
-def register_all() -> None:
-    common_ui_loader().registerCustomWidget(ModelDownload)
+# def register_all() -> None:
+    # common_ui_loader().registerCustomWidget(ModelDownload)
 
 MODEL_DOWNLOAD_UI = preload_ui("modeldownload.ui")
 
@@ -29,7 +29,7 @@ class ModelDownload(QDialog):
 
     ui: UI_ModelDownload
 
-    closed: Signal = Signal()
+    closed: TypedSignal[()] = typed_signal()
 
     def __init__(self, to_download: list[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -52,15 +52,15 @@ class ModelDownload(QDialog):
         self.dl_mgr.start()
 
     @override
-    def closeEvent(self, _1: object, /) -> None:
+    def closeEvent(self, a0: object) -> None:
         self.closed.emit()
 
-    @Slot()
-    def download_done(self) -> None:
+    @typed_slot(object)
+    def download_done(self, _: object) -> None:
         self.dl_mgr = None
         _ = self.close()
 
-    @Slot(str, tuple, tuple)
+    @typed_slot(PullProgress)
     def update_progress(self, progress: PullProgress) -> None:
         self.ui.text.setText(self.base_text.format(model_name=progress.current_model_downloading_name))
 

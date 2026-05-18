@@ -1,11 +1,12 @@
 import functools
-from typing import override
+from typing import final, override
 from dataclasses import dataclass
-from PySide6.QtCore import QObject, Signal
+from PyQt6.QtCore import QObject
 
 import ollama
 
 from asyncbridge import AsyncTask
+from common_utils import typed_signal
 
 @functools.lru_cache(maxsize=1)
 def ollama_client() -> ollama.AsyncClient:
@@ -19,10 +20,11 @@ class PullProgress:
     all_models_downloaded_percent: float
     single_model_download_percent: float | None
 
-class ModelPullTask(AsyncTask):
+@final
+class ModelPullTask(AsyncTask[None]):
     """Downloads a list of models."""
 
-    update_progress: Signal = Signal(PullProgress)
+    update_progress = typed_signal(PullProgress)
 
     to_download: list[str]
 

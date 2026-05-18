@@ -2,14 +2,13 @@
 UI utilities.
 """
 
+import io
 import os
-import functools
 import dataclasses
-from typing import Callable, LiteralString, get_type_hints, TYPE_CHECKING
+from typing import IO, Any, Callable, LiteralString, cast, get_type_hints, TYPE_CHECKING
 
-from PySide6.QtUiTools import QUiLoader
-from PySide6.QtWidgets import QVBoxLayout, QWidget
-from PySide6.QtCore import QBuffer, QByteArray, QIODevice
+from PyQt6 import uic
+from PyQt6.QtWidgets import QWidget
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
@@ -22,12 +21,13 @@ def find[T: QWidget](where: QWidget, widget_named: str, of_type: type[T]) -> T:
         raise LookupError(f"Could not find a {of_type.__name__} named {widget_named!r}")
     return res
 
-# @functools.lru_cache(maxsize=1)
-def common_ui_loader() -> QUiLoader:
-    """Returns the global QUiLoader instance. Creates one if it doesn't exist yet. This is the instance that will be used for widget registration."""
-    global _loader
-    _loader = QUiLoader()
-    return _loader
+def load_ui[T: QWidget](type_: type[T], source: IO[bytes] | IO[str] | os.PathLike[str], interior_of: QWidget | None = None, package: str = "") -> T:
+    """Type-safe wrapper around PyQt6.uic.load_ui.loadUi."""
+    widget = cast(Any | None, uic.load_ui.loadUi(source, interior_of, package))   # pyright: ignore[reportUnknownMemberType, reportExplicitAny]
+    assert widget is not None
+    if not isinstance(widget, type_):
+        raise RuntimeError(f"Loading {source!r}: Expected {type_.__qualname__}, got {type(widget).__qualname__}")   # pyright: ignore[reportAny]
+    return widget
 
 # The rest of the file has some dubious code.
 # The problem I faced was that pyside6-uic does not generate type hints. In my experience type hints speed up development time immensely, I really wanted to have them.
@@ -75,25 +75,18 @@ def common_ui_loader() -> QUiLoader:
 #         def __init__(self, parent: QWidget | None = None) -> None:
 #             super().__init__(parent)
 #
-#             loaded = common_ui_loader().load(EXAMPLE_UI(), self)
-#             self.vbox = QVBoxLayout(self)
-#             self.vbox.setContentsMargins(0, 0, 0, 0)
-#             self.vbox.addWidget(loaded)
-#             self.setLayout(layout)
-# 
+#             loaded = uic.load_ui.loadUi(EXAMPLE_UI(), self)
 #             self.btn = find(self, "btn", QPushButton)
 #             self.lbl = find(self, "lbl", QLabel)
 # 
 # That involves a lot of repetition though, especially across patterns, keeping it DRY is part why I went to all this hassle
 
-def preload_ui(name: LiteralString) -> Callable[[], QIODevice]:
-    """Returns a function you can invoke to get a fresh QIODevice of the UI file. Only performs I/O at initial call time."""
-
+def preload_ui(name: LiteralString) -> Callable[[], IO[bytes]]:
+    """Returns a function you can invoke to get a fresh IO[bytes] of the UI file. Only reads the file at initial call time."""
     path = os.path.join(os.path.dirname(os.path.realpath(__file__)), name)
     with open(path, "rb") as f:
-        data = QByteArray(f.read())
-    
-    return lambda: QBuffer(data)
+        data = f.read()
+    return lambda: io.BytesIO(data)
 
 SOURCE_FIELD = {"teamproject.utils.source_field": True}
 
@@ -124,14 +117,7 @@ def populate_children[T: DataclassInstance](source: QWidget, cls: type[T]) -> T:
 
     return cls(**kwargs)
 
-def load_and_apply_ui[T: DataclassInstance](dev: QIODevice, parent: QWidget, ui_class: type[T]) -> T:
-    # I suspect the horrible bug to be here somewhere? To be honest, I don't even know
-    loaded = common_ui_loader().load(dev, parent)
+def load_and_apply_ui[T: DataclassInstance](src: IO[bytes], parent: QWidget, ui_class: type[T]) -> T:
+    loaded = load_ui(QWidget, src, parent)
     ui = populate_children(loaded, ui_class)
-
-    layout = QVBoxLayout(parent)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.addWidget(loaded)
-    parent.setLayout(layout)
-
     return ui

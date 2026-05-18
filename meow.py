@@ -1,27 +1,17 @@
 import sys
 
-from PySide6 import QtWidgets
-from PySide6.QtUiTools import QUiLoader
+from PyQt6 import QtWidgets
 
-from common_utils import PythonIODevice
-from widgets.uiutils import find, common_ui_loader
-
-import widgets
-widgets.register_all()
+from widgets.uiutils import find, load_ui
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
     with open("mainwindow.ui", "rb") as f:
-        # window = common_ui_loader().load(PythonIODevice(f))
-        loader = QUiLoader()
-        pio = PythonIODevice(f)
-        window = loader.load(pio)
-        # window = common_ui_loader().load(PythonIODevice(f))
+        window = load_ui(QtWidgets.QMainWindow, f)
 
     # Temporary code
-    # mdi = find(window, "uiEditArea", QtWidgets.QMdiArea)
-    # _ = mdi.addSubWindow(QtWidgets.QLabel("Hello, world!", mdi))
+    mdi = find(window, "uiEditArea", QtWidgets.QMdiArea)
+    _ = mdi.addSubWindow(QtWidgets.QLabel("Hello, world!", mdi))
 
     window.show()
-
     sys.exit(app.exec())
