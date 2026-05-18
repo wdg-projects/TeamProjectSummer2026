@@ -22,10 +22,12 @@ def find[T: QWidget](where: QWidget, widget_named: str, of_type: type[T]) -> T:
         raise LookupError(f"Could not find a {of_type.__name__} named {widget_named!r}")
     return res
 
-@functools.lru_cache(maxsize=1)
+# @functools.lru_cache(maxsize=1)
 def common_ui_loader() -> QUiLoader:
     """Returns the global QUiLoader instance. Creates one if it doesn't exist yet. This is the instance that will be used for widget registration."""
-    return QUiLoader()
+    global _loader
+    _loader = QUiLoader()
+    return _loader
 
 # The rest of the file has some dubious code.
 # The problem I faced was that pyside6-uic does not generate type hints. In my experience type hints speed up development time immensely, I really wanted to have them.

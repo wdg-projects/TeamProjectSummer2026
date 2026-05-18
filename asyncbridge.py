@@ -11,13 +11,13 @@ Remember that, since run in a separate thread, async tasks must not interact wit
 # - Use AsyncTask the same way you'd use threading.Thread, except you also can also connect to the provided Qt signals, if you'd like to watch for completion/errors
 # - You probably won't need to ever invoke threaded_event_loop()
 
-import asyncio
 import sys
-import traceback
-from typing import Any, override
+import asyncio
 import warnings
+import traceback
 import functools
 import threading
+from typing import override
 from collections.abc import Coroutine
 
 from PySide6.QtCore import QObject, Signal, SignalInstance
@@ -44,7 +44,7 @@ def threaded_event_loop() -> asyncio.AbstractEventLoop:
     threading.Thread(target=target, daemon=True).start()
 
     # TODO: Check for sneaky race condition between application exit and _quit_event.wait
-    _ = app.aboutToQuit.connect(lambda: _quit_event.set())
+    _ = app.aboutToQuit.connect(lambda: loop.call_soon_threadsafe(_quit_event.set))
     return loop
 
 class AsyncTask(QObject):

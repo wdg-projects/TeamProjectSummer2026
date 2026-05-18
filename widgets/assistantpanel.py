@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot
 from PySide6.QtGui import QStandardItem, QStandardItemModel
-from PySide6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QWidget
+from PySide6.QtUiTools import QUiLoader
+from PySide6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QVBoxLayout, QWidget
 from ollama import Message
 
 from asyncbridge import AsyncTask
@@ -35,9 +36,25 @@ class AssistantPanel(QWidget):
     models_present: bool
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        global ui
+        global stream, loader, widget, ui, layout
         super().__init__(parent)
-        self.ui = load_and_apply_ui(ASSISTANT_PANEL_UI(), self, UI_AssistantPanel)
+        stream = ASSISTANT_PANEL_UI()
+        loader = QUiLoader()
+        widget = loader.load(stream)
+        self.ui = ui = UI_AssistantPanel(widget,
+            widget.findChild(QListView, "chat_log"),
+            widget.findChild(QLineEdit, "entry"),
+            widget.findChild(QPushButton, "send")
+        )
+        print(widget)
+        widget.destroyed.connect(self.whoops)
+        print(widget)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(widget)
+        self.setLayout(layout)
+
+        # self.ui = load_and_apply_ui(ASSISTANT_PANEL_UI(), self, UI_AssistantPanel)
         self.models_present = False
         self.msg_mgr = None
         self.item_model = QStandardItemModel(self)
@@ -48,6 +65,11 @@ class AssistantPanel(QWidget):
         _ = self.new_message.connect(self.on_new_message)
 
         self.ensure_model()
+
+    @staticmethod
+    def whoops(obj: QObject) -> None:
+        print(obj)
+        print("!!! trap")
 
     @Slot(str, str)
     def on_new_message(self, role: str, text: str) -> None:
@@ -60,6 +82,9 @@ class AssistantPanel(QWidget):
             return
         if self.msg_mgr is not None:
             return
+
+        print("meow", widget)
+        print("mrrp", self.ui.widget)
 
         user_message = self.ui.entry.text()
         self.ui.entry.setText("")
