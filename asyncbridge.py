@@ -35,7 +35,6 @@ def threaded_event_loop() -> asyncio.AbstractEventLoop:
         loop.run_forever()
     threading.Thread(target=target, daemon=True).start()
 
-    # TODO: Check for sneaky race condition between application exit and _quit_event.wait
     _ = app.aboutToQuit.connect(lambda: loop.call_soon_threadsafe(loop.stop))
     return loop
 
@@ -77,7 +76,7 @@ class AsyncTask[ResultType](QObject):
 
     async def run(self) -> ResultType:
         if self._coro is None:
-            raise RuntimeError("AsyncTask() fired with no target")
+            raise RuntimeError("AsyncTask fired with no target")
         return await self._coro
 
     # Private

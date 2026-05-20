@@ -4,8 +4,6 @@ from typing import cast
 from PyQt6.QtGui import QStandardItem, QStandardItemModel
 from PyQt6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QWidget
 
-from ollama import Message
-
 from asyncbridge import AsyncTask
 from services import ollama_adapter
 from widgets.modeldownload import ModelDownload
@@ -28,8 +26,10 @@ class AssistantPanel(QWidget):
 
     ui: UI_AssistantPanel
     mdl_mgr: AsyncTask[list[str]]
-    msg_mgr: AsyncTask[None] | None
+    msg_mgr: AsyncTask[str | list[ollama_adapter.ToolMessage]] | None
     item_model: QStandardItemModel
+
+    chat_log: list[ollama_adapter.ToolMessage]
 
     models_present: bool
 
@@ -45,15 +45,18 @@ class AssistantPanel(QWidget):
         self.ui.chat_log.setModel(self.item_model)
         _ = self.ui.send.pressed.connect(self.on_send)
         _ = self.new_message.connect(self.on_new_message)
+        self.ui.chat_log.setWordWrap(True)
+
+        self.chat_log = []
 
         self.ensure_model()
 
     @typed_slot(str, str)
-    def on_new_message(self, role: str, text: str) -> None:
+    def on_new_message(self, _role: str, text: str) -> None:
         row = self.item_model.rowCount()
         _ = self.item_model.insertRow(row)
-        self.item_model.setItem(row, 1, QStandardItem(role))
-        self.item_model.setItem(row, 0, QStandardItem(text))
+        # self.item_model.setItem(row, 1, QStandardItem(role))
+        self.item_model.setItem(row, 0, QStandardItem("".join(f"{x}\u200b" for x in text)))
 
     def on_send(self) -> None:
         if not self.models_present:
@@ -64,25 +67,33 @@ class AssistantPanel(QWidget):
         user_message = self.ui.entry.text()
         self.ui.entry.setText("")
 
+        self.chat_log.append((ollama_adapter.MessageSource.USER, user_message))
         self.new_message.emit("user", user_message)
 
-        messages: list[Message] = []
-        for i in range(self.item_model.rowCount()):
-            role_item, content_item = self.item_model.item(i, 1), self.item_model.item(i, 0)
-            assert role_item and content_item
-            role = role_item.text()
-            content = content_item.text()
-            messages.append(Message(role=role, content=content))
+        chat_iter = ollama_adapter.tool_chat("com_teamproject_uiassistant__deepseek", self.chat_log)
+        async def fetch_response(to_send: bool | None) -> str | list[ollama_adapter.ToolMessage]:
+            x = await chat_iter.asend(to_send)
+            return x
 
-        async def fetch_response():
-            print("Begin fetch response")
-            reply = (await ollama_adapter.chat("deepseek-r1:latest", messages)).content
-            assert reply is not None
-            self.new_message.emit("assistant", reply)
-            self.msg_mgr = None
-            print("End fetch response")
+        self.msg_mgr = AsyncTask(fetch_response(None))
+        def on_complete(rsp: object) -> None:
+            rsp = cast(str | list[ollama_adapter.ToolMessage], rsp)
+            if isinstance(rsp, str):
+                btn = QMessageBox.warning(self,
+                    "The model wants to execute a script",
+                    rsp,
+                    QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+                    QMessageBox.StandardButton.Cancel
+                )
+                self.msg_mgr = AsyncTask(fetch_response(btn == QMessageBox.StandardButton.Ok))
+                self.msg_mgr.complete.connect(on_complete)
+                self.msg_mgr.start()
+            else:
+                self.chat_log = rsp
+                self.new_message.emit("assistant", self.chat_log[-1][1])
+                self.msg_mgr = None
 
-        self.msg_mgr = AsyncTask(fetch_response())
+        self.msg_mgr.complete.connect(on_complete)
         self.msg_mgr.start()
 
     def ensure_model(self) -> None:
@@ -102,6 +113,7 @@ class AssistantPanel(QWidget):
         missing = cast(list[str], missing)
         if not missing:
             self.models_present = True
+            ollama_adapter.ensure()
             return
 
         missing_text = ", ".join(missing)
