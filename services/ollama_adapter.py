@@ -83,6 +83,8 @@ TRIGGER_PHRASE = re.compile(r"computer,\s+run:\s+```.*\n([\s\S]*)```", re.IGNORE
 
 async def tool_chat(model: str, log: list[ToolMessage]) -> AsyncGenerator[list[ToolMessage] | str, bool | None]:
     # Absolute goddamn mess, but this is merely for testing
+    log = log.copy()
+    start_len = len(log)
 
     client = ollama_client()
 
@@ -140,4 +142,4 @@ async def tool_chat(model: str, log: list[ToolMessage]) -> AsyncGenerator[list[T
         chatlog.append(ollama.Message(role="user", content=f"[Responding to the assistant, computer says:] ```\n{text}\n```"))
         log.append((MessageSource.COMPUTER, text))
 
-    yield log
+    yield log[start_len:]
