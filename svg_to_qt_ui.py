@@ -6,7 +6,7 @@ Converts an SVG file containing <rect> and <text> elements into a valid
 Qt Designer .ui XML file.
 
   <rect>   →  QWidget   (with background / border from fill / stroke)
-  <text>   →  QTextEdit (with font, colour, and plain-text content)
+  <text>   →  QLabel (with font, colour, and plain-text content)
 
 Architecture:
   1.  Color           – immutable RGBA colour model
@@ -40,14 +40,16 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import io
 import re
 import sys
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import IO, Dict, List, Optional, Tuple, Union, final
 from xml.dom import minidom
 
+TMP_CHANGE_ROOT_CLASS = "QWidget"  # "QMainWindow"
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. COLOUR DATA MODEL
@@ -427,7 +429,7 @@ _TEXT_WIDTH_PER_PT  = 0.65  # rough average character width relative to pt size
 @dataclass(frozen=True)
 class TextElement:
     """
-    An SVG <text> (or <text>/<tspan>) → becomes a QTextEdit in the .ui file.
+    An SVG <text> (or <text>/<tspan>) → becomes a QLabel in the .ui file.
 
     SVG text position semantics:
       (x, y) is the *baseline anchor point*, not the top-left corner.
@@ -498,7 +500,7 @@ def find_tightest_container(
     Return the smallest-area element in *all_elements* that fully contains
     *candidate*, or None if *candidate* is at root level.
 
-    Text elements are never treated as containers (a QTextEdit cannot be a
+    Text elements are never treated as containers (a QLabel cannot be a
     parent widget in Qt Designer).
     """
     containers = [
@@ -527,17 +529,17 @@ class SVGParser:
       3. Apply opacity / fill-opacity / stroke-opacity adjustments.
     """
 
-    _SVG_NS = "http://www.w3.org/2000/svg"
+    _SVG_NS: str = "http://www.w3.org/2000/svg"
 
-    def parse(self, svg_path: str | Path) -> List[SVGElement]:
+    def parse(self, svg_path: str | Path | IO[str]) -> list[SVGElement]:
         """
         Load *svg_path* and return a list of SVGElement objects in document order.
         """
-        tree = ET.parse(str(svg_path))
+        tree = ET.parse(str(svg_path) if isinstance(svg_path, Path) else svg_path)
         root = tree.getroot()
         ns   = self._SVG_NS
 
-        elements: List[SVGElement] = []
+        elements: list[SVGElement] = []
 
         for elem in root.iter():
             local = elem.tag.replace(f"{{{ns}}}", "")
@@ -788,7 +790,7 @@ class HierarchyBuilder:
     geometric containment to infer parent/child relationships.
 
     Rules:
-      • Only Rectangle elements can be parents (QTextEdit cannot host children).
+      • Only Rectangle elements can be parents (QLabel cannot host children).
       • A text element that is not inside any rect becomes a root-level node.
     """
 
@@ -836,7 +838,7 @@ class QtUIExporter:
                     <property name="geometry"> …
                     <property name="styleSheet"> … (fill/stroke colours)
 
-    TextElement→  <widget class="QTextEdit">
+    TextElement→  <widget class="QLabel">
                     <property name="geometry"> …
                     <property name="font">      … (family/size/bold/italic/…)
                     <property name="styleSheet"> … (text colour, background)
@@ -844,7 +846,7 @@ class QtUIExporter:
                     <property name="readOnly">  … (true — read-only by default)
                     <property name="alignment"> … (text-anchor mapping)
 
-    A QTextEdit is always set readOnly="false" so it remains editable in the
+    A QLabel is always set readOnly="false" so it remains editable in the
     running application; change readOnly to true if display-only is preferred.
     """
 
@@ -859,7 +861,7 @@ class QtUIExporter:
         ET.SubElement(ui_elem, "class").text = class_name
 
         main_window = ET.SubElement(ui_elem, "widget",
-                                    attrib={"class": "QMainWindow",
+                                    attrib={"class": TMP_CHANGE_ROOT_CLASS,
                                             "name":  class_name})
         self._add_geometry(main_window, 0, 0, window_width, window_height)
 
@@ -897,25 +899,22 @@ class QtUIExporter:
         for child in node.children:
             self._emit_node(widget_elem, child)
 
-    # ── QTextEdit emitter (TextElement) ───────────────────────────────────────
+    # ── QLabel emitter (TextElement) ───────────────────────────────────────
 
     def _emit_text_edit(self, parent_elem: ET.Element, node: TreeNode) -> None:
         """
-        Emit a <widget class="QTextEdit"> with font, colour, and content.
+        Emit a <widget class="QLabel"> with font, colour, and content.
 
         Qt .ui property reference:
           font        → <property name="font"><font> … </font></property>
           styleSheet  → <property name="styleSheet"><string notr="true">…
           plainText   → <property name="plainText"><string>…
-          readOnly    → <property name="readOnly"><bool>false</bool>
-          alignment   → not a standard QTextEdit property; we add it as a
-                        comment so the developer knows the original intent.
         """
         x, y, w, h = node.relative_geometry()
         te: TextElement = node.item  # type: ignore[assignment]
 
         widget_elem = ET.SubElement(parent_elem, "widget",
-                                    attrib={"class": "QTextEdit",
+                                    attrib={"class": "QLabel",
                                             "name":  node.qt_name})
         # Geometry
         self._add_geometry(widget_elem, x, y, w, h)
@@ -930,9 +929,6 @@ class QtUIExporter:
 
         # Plain-text content
         self._add_plain_text(widget_elem, te.content)
-
-        # readOnly — set to false so the widget is editable; change as needed.
-        self._add_bool_property(widget_elem, "readOnly", False)
 
     # ── Qt property builders ──────────────────────────────────────────────────
 
@@ -985,11 +981,11 @@ class QtUIExporter:
     @staticmethod
     def _add_plain_text(parent: ET.Element, text: str) -> None:
         """
-        <property name="plainText">
+        <property name="text">
           <string>…</string>
         </property>
         """
-        prop = ET.SubElement(parent, "property", attrib={"name": "plainText"})
+        prop = ET.SubElement(parent, "property", attrib={"name": "text"})
         ET.SubElement(prop, "string").text = text
 
     @staticmethod
@@ -1014,9 +1010,9 @@ class QtUIExporter:
     @staticmethod
     def _text_stylesheet(font: FontStyle) -> str:
         """
-        Build a Qt stylesheet string for a QTextEdit.
+        Build a Qt stylesheet string for a QLabel.
 
-        We always set background-color to transparent so the QTextEdit blends
+        We always set background-color to transparent so the QLabel blends
         with whatever parent widget sits beneath it.  The text colour comes
         from the SVG fill attribute on the <text> element.
         """
@@ -1036,6 +1032,7 @@ class QtUIExporter:
 # 10. PIPELINE ORCHESTRATOR
 # ──────────────────────────────────────────────────────────────────────────────
 
+@final
 class SVGToQtUI:
     """
     High-level façade:
@@ -1046,6 +1043,12 @@ class SVGToQtUI:
         self._parser   = SVGParser()
         self._builder  = HierarchyBuilder()
         self._exporter = QtUIExporter()
+
+    def convert_str(self, svg_data: str, class_name: str = "MainWindow") -> str:
+        elements = self._parser.parse(io.StringIO(svg_data))
+        win_w, win_h = self._read_svg_dimensions(io.StringIO(svg_data))
+        roots = self._builder.build(elements)
+        return self._exporter.export(roots, class_name=class_name, window_width=win_w, window_height=win_h)
 
     def convert(
         self,
@@ -1080,8 +1083,8 @@ class SVGToQtUI:
         print(f"      Done.  ({len(xml_str):,} bytes)")
 
     @staticmethod
-    def _read_svg_dimensions(svg_path: Path) -> Tuple[int, int]:
-        tree = ET.parse(str(svg_path))
+    def _read_svg_dimensions(svg_path: Path | IO[str]) -> Tuple[int, int]:
+        tree = ET.parse(str(svg_path) if isinstance(svg_path, Path) else svg_path)
         root = tree.getroot()
         def _int_attr(attr: str, default: int) -> int:
             val = root.get(attr, str(default))
@@ -1096,7 +1099,7 @@ class SVGToQtUI:
         prefix = " " * indent
         for node in nodes:
             x, y, w, h = node.relative_geometry()
-            kind = "QTextEdit" if node.is_text else "QWidget "
+            kind = "QLabel" if node.is_text else "QWidget "
             fill_tag = ""
             if node.is_text:
                 te: TextElement = node.item  # type: ignore[assignment]
@@ -1269,7 +1272,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description=(
             "Convert SVG <rect> and <text> elements to a Qt Designer .ui file.\n"
             "  <rect>  → QWidget   (geometry + fill/stroke colours)\n"
-            "  <text>  → QTextEdit (font, colour, plain-text content)"
+            "  <text>  → QLabel (font, colour, plain-text content)"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

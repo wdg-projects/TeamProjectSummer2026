@@ -6,14 +6,16 @@ import os
 import re
 import sys
 import traceback
-from typing import final, override
+from typing import cast, final, override
 from dataclasses import dataclass
 from PyQt6.QtCore import QObject
 
+from PyQt6.QtWidgets import QLabel, QPushButton, QTextEdit, QWidget
 import ollama
 
 from asyncbridge import AsyncTask
 from common_utils import typed_signal
+from edited_subwindow import EditedSubwindow
 
 @functools.lru_cache(maxsize=1)
 def ollama_client() -> ollama.AsyncClient:
@@ -79,9 +81,108 @@ class MessageSource(enum.StrEnum):
 
 type ToolMessage = tuple[MessageSource, str]
 
-TRIGGER_PHRASE = re.compile(r"computer,\s+run:\s+```.*\n([\s\S]*)```", re.IGNORECASE)
+TRIGGER_PHRASE = re.compile(r"computer,\s+run:\s+```.*\n([\s\S]*?)```", re.IGNORECASE)
 
-async def tool_chat(model: str, log: list[ToolMessage]) -> AsyncGenerator[list[ToolMessage] | str, bool | None]:
+ASSISTANT_FAKE_DOCS_PROMPT = "Computer, run: ```\nprint(ui_documentation())\n```"
+COMPUTER_FAKE_DOCS_RSP = """
+Global functions for common tasks (Prefer using these, they're more efficient):
+get_ui() -> QWidget
+  Returns the UI the user is editing.
+
+all_text_widgets() -> dict[QWidget, str]
+  Returns a dict of all widgets in the edited UI tree that have text.
+
+change_widget_type(src: QWidget, target_type: type[QWidget]) -> None
+  Modifies a widget's type, preserving styling and text.
+
+delete_widget(src: QWidget) -> None
+  Removes a widget from the tree.
+"""
+
+# TODO: All this is technically incorrect and Qt stuff is being accessed from the wrong thread, oops!
+
+def extract_widget_text(w: QWidget) -> str | None:
+    if isinstance(w, QLabel):
+        return w.text()
+    if isinstance(w, QPushButton):
+        return w.text()
+    if isinstance(w, QTextEdit):
+        return w.toPlainText()
+    return None
+
+def run_script(script: str, edited_subwindow: EditedSubwindow | None) -> str:
+    # Run from main thread!!! Important!!!
+    glob: dict[str, object] = {}
+    def _get_ui() -> QWidget:
+        if edited_subwindow is None:
+            raise RuntimeError("Cannot fetch current UI: The user has not loaded a UI yet.")
+        return edited_subwindow.contents
+
+    def _all_text_widgets() -> dict[QWidget, str]:
+        res: dict[QWidget, str] = {}
+        def f(w: QWidget) -> None:
+            if (text := extract_widget_text(w)) is not None:
+                res[w] = text
+            for child in w.children():
+                if isinstance(child, QWidget):
+                    f(child)
+        f(_get_ui())
+        return res
+
+    def _change_widget_type(src: QWidget, target_type: type[QWidget]) -> None:
+        res = target_type(parent=src.parentWidget())
+        # res.move(src.pos())
+        res.setGeometry(src.geometry())
+        res.show()
+
+        src.setParent(None)
+        src.deleteLater()
+
+        if (text := extract_widget_text(src)) is not None:
+            if isinstance(res, QPushButton):
+                res.setText(text)
+            elif isinstance(res, QLabel):
+                res.setText(text)
+            elif isinstance(res, QTextEdit):
+                res.setPlainText(text)
+        print(f"Changed 1 widgets from {type(src).__name__} to {target_type.__name__}")
+
+    def _delete_widget(src: QWidget) -> None:
+        src.setParent(None)
+        src.deleteLater()
+        print(f"Deleted 1 widgets ({src})")
+
+    glob["get_ui"] = _get_ui
+    glob["all_text_widgets"] = _all_text_widgets
+    glob["change_widget_type"] = _change_widget_type
+    glob["delete_widget"] = _delete_widget
+
+    old = sys.stdout, sys.stderr
+    tgt = io.StringIO()
+    sys.stdout = sys.stderr = tgt
+    try:
+        exec(script, globals=glob, locals=glob)
+    except Exception as e:
+        incident_lines: list[int] = []
+        tb = e.__traceback__
+        while tb is not None:
+            if tb.tb_frame.f_code.co_filename == "<string>":
+                incident_lines.append(tb.tb_lineno)
+            tb = tb.tb_next
+
+        code_lines = script.split("\n")
+        print("Traceback (most recent call last):", file=sys.stderr)
+        for lno in incident_lines:
+            print(f"  File \"script.py\", line {lno}, in <module>", file=sys.stderr)
+            if lno - 1 >= 0 and lno - 1 < len(code_lines):
+                print(f"    {code_lines[lno - 1]}", file=sys.stderr)
+        print(f"{type(e).__qualname__}: {e}", file=sys.stderr)
+        del e
+    sys.stdout, sys.stderr = old
+    return tgt.getvalue()
+
+
+async def tool_chat(model: str, log: list[ToolMessage], edited_subwindow: EditedSubwindow | None) -> AsyncGenerator[list[ToolMessage] | str, str | None]:
     # Absolute goddamn mess, but this is merely for testing
     log = log.copy()
     start_len = len(log)
@@ -98,31 +199,32 @@ async def tool_chat(model: str, log: list[ToolMessage]) -> AsyncGenerator[list[T
         role = "assistant" if x[0] is MessageSource.ASSISTANT else "user"
         chatlog.append(ollama.Message(role=role, content=(PREFIX[x[0]] + x[1]).strip()))
 
+    chatlog.append(ollama.Message(role="assistant", content=(PREFIX[MessageSource.ASSISTANT] + ASSISTANT_FAKE_DOCS_PROMPT).strip()))
+    chatlog.append(ollama.Message(role="user", content=(PREFIX[MessageSource.COMPUTER] + COMPUTER_FAKE_DOCS_RSP).strip()))
+
     while True:
         contents = ""
-        print("Begin fetch response")
+        print("===== Begin fetch response")
         async for x in await client.chat(model, chatlog, stream=True):
             if x.message.content is not None:
                 contents += x.message.content
-        print("End fetch response")
+            if x.message.thinking is not None:
+                print(x.message.thinking, end="")
+        print("\n===== End fetch response")
+
+        # Remove the two fake messages as they seem to make the AI go in loops
+        del chatlog[-1]
+        del chatlog[-1]
+
+        print(contents)
 
         computer_response: str | None = None
         full_match: str | None = None
         for match in TRIGGER_PHRASE.finditer(contents):
             full_match = match.group(0)
-            code = match.group(1)
-            if (yield code):
-                old = sys.stdout, sys.stderr
-                tgt = io.StringIO()
-                sys.stdout = sys.stderr = tgt
-                try:
-                    exec(code)
-                except:
-                    traceback.print_exc()
-                sys.stdout, sys.stderr = old
-                computer_response = tgt.getvalue()
-                break
-            else:
+            code = cast(str, match.group(1))
+            computer_response = yield code
+            if computer_response is None:
                 computer_response = "RuntimeError: The user has aborted the operation."
 
         if computer_response is None or full_match is None:
@@ -134,10 +236,12 @@ async def tool_chat(model: str, log: list[ToolMessage]) -> AsyncGenerator[list[T
 
         if len(computer_response) > 1024:
             text = f"RuntimeError: Your script generated overlong output: {len(computer_response)}B. Please ask me again, assistant, but limiting your script's output length."
-        if computer_response.strip():
+        elif computer_response.strip():
             text = computer_response
         else:
             text = f"[Responding to the assistant, computer says:] ```runner.py:1:1: UserWarning: your script successfully finished, but generated no stdout / stderr; did you forget to print()?  analyze the exit condition of your script to figure out if this is correct!```"
+
+        print("SCRIPT RESPONSE", text)
 
         chatlog.append(ollama.Message(role="user", content=f"[Responding to the assistant, computer says:] ```\n{text}\n```"))
         log.append((MessageSource.COMPUTER, text))

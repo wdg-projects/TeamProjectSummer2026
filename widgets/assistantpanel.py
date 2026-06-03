@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPu
 
 from asyncbridge import AsyncTask
 from services import ollama_adapter
+from edited_subwindow import EditedSubwindow
 from widgets.modeldownload import ModelDownload
 from common_utils import TypedSignal, typed_signal, typed_slot
 
@@ -45,6 +46,8 @@ class AssistantPanelController(QObject):
     model: AssistantChatModel
     view: AssistantPanel
 
+    edited_subwindow: EditedSubwindow | None
+
     @dataclass
     class StartState:
         pass
@@ -60,7 +63,7 @@ class AssistantPanelController(QObject):
     @dataclass
     class WaitForOllamaResponseState:
         msg_mgr: AsyncTask[str | list[ollama_adapter.ToolMessage]]
-        chat_iter: collections.abc.AsyncGenerator[str | list[ollama_adapter.ToolMessage], bool]
+        chat_iter: collections.abc.AsyncGenerator[str | list[ollama_adapter.ToolMessage], str | None]
 
     type State = StartState | WaitForModelVerifiedState | WaitForUserMessageState | WaitForOllamaResponseState
 
@@ -72,11 +75,17 @@ class AssistantPanelController(QObject):
         super().__init__(parent)
         self.model = model
         self.view = view
+        self.edited_subwindow = None
 
         _ = self.view.ui.send.pressed.connect(self.on_send)
         _ = self.new_messages.connect(self.on_new_message)
 
         self.ensure_model()
+
+    @typed_slot(EditedSubwindow)
+    def inject_edited_subwindow(self, edited_subwindow: EditedSubwindow) -> None:
+        self.edited_subwindow = edited_subwindow
+        print("woohoo i own an", self.edited_subwindow, "now")
 
     def change_state(self, new: State) -> None:
         match (self.state, new):
@@ -157,7 +166,7 @@ class AssistantPanelController(QObject):
         msg = (ollama_adapter.MessageSource.USER, self.view.ui.entry.text())
         self.new_messages.emit([msg])
 
-        chat_iter = ollama_adapter.tool_chat("com_teamproject_uiassistant__deepseek", self.model.log)
+        chat_iter = ollama_adapter.tool_chat("com_teamproject_uiassistant__deepseek", self.model.log, self.edited_subwindow)
         msg_mgr = AsyncTask(chat_iter.asend(None))
 
         msg_mgr.complete.connect(self.on_model_response_fragment)
@@ -178,7 +187,11 @@ class AssistantPanelController(QObject):
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel
             )
-            msg_mgr = AsyncTask(self.state.chat_iter.asend(btn == QMessageBox.StandardButton.Ok))
+            if btn == QMessageBox.StandardButton.Ok:
+                res = ollama_adapter.run_script(rsp, self.edited_subwindow)
+            else:
+                res = None
+            msg_mgr = AsyncTask(self.state.chat_iter.asend(res))
             msg_mgr.complete.connect(self.on_model_response_fragment)
             msg_mgr.start()
             return self.change_state(self.WaitForOllamaResponseState(msg_mgr, self.state.chat_iter))

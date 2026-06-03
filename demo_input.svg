@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">
+
+  <!-- ── Main panel ──────────────────────────────────────────────────── -->
+  <rect id="mainPanel" x="10" y="10" width="780" height="580"
+        fill="#f0f0f0" stroke="#cccccc" stroke-width="1"/>
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────── -->
+  <rect id="sidebar" x="20" y="20" width="180" height="560"
+        fill="#1e2a3a"/>
+
+  <!-- Sidebar heading text -->
+  <text id="lblAppName"
+        x="30" y="60"
+        font-family="Arial, sans-serif" font-size="18px" font-weight="bold"
+        fill="white">
+    MyApp
+  </text>
+
+  <!-- Sidebar section label -->
+  <text id="lblNavSection"
+        x="30" y="85"
+        font-family="Arial" font-size="10px"
+        style="fill:#95a5a6;text-anchor:start">
+    NAVIGATION
+  </text>
+
+  <rect id="sidebarHeader" x="30" y="30" width="160" height="50"
+        fill="#2c3e50"/>
+  <rect id="navItem1"      x="30" y="90" width="160" height="40"
+        fill="#3498db"/>
+  <rect id="navItem2"      x="30" y="140" width="160" height="40"
+        style="fill:#2980b9"/>
+
+  <!-- Nav item labels (inside navItem1 / navItem2) -->
+  <text id="lblNav1"
+        x="45" y="115"
+        font-family="Arial" font-size="13px" fill="white">
+    Dashboard
+  </text>
+  <text id="lblNav2"
+        x="45" y="165"
+        font-family="Arial" font-size="13px" fill="white">
+    Reports
+  </text>
+
+  <!-- ── Content area ─────────────────────────────────────────────────── -->
+  <rect id="contentArea" x="210" y="20" width="570" height="560"
+        fill="white" stroke="#e0e0e0" stroke-width="1"/>
+
+  <!-- Page title -->
+  <text id="lblPageTitle"
+        x="225" y="55"
+        font-family="Arial, sans-serif" font-size="22px" font-weight="bold"
+        fill="#2c3e50">
+    Dashboard Overview
+  </text>
+
+  <!-- ── Toolbar ──────────────────────────────────────────────────────── -->
+  <rect id="toolbar"  x="220" y="65" width="550" height="50"
+        fill="#fafafa" stroke="#ddd" stroke-width="1"/>
+  <rect id="btnNew"   x="230" y="75" width="80" height="30"
+        fill="steelblue"  stroke="#1a5276" stroke-width="1"/>
+  <rect id="btnOpen"  x="320" y="75" width="80" height="30"
+        fill="seagreen"   stroke="#145a32" stroke-width="1"/>
+  <rect id="btnSave"  x="410" y="75" width="80" height="30"
+        fill="darkorange" stroke="#784212" stroke-width="1"/>
+
+  <!-- Button labels -->
+  <text id="lblBtnNew"  x="255" y="95"
+        font-family="Arial" font-size="12px" font-weight="bold" fill="white">
+    New
+  </text>
+  <text id="lblBtnOpen" x="345" y="95"
+        font-family="Arial" font-size="12px" font-weight="bold" fill="white">
+    Open
+  </text>
+  <text id="lblBtnSave" x="434" y="95"
+        font-family="Arial" font-size="12px" font-weight="bold" fill="white">
+    Save
+  </text>
+
+  <!-- ── Canvas ───────────────────────────────────────────────────────── -->
+  <rect id="canvas" x="220" y="125" width="550" height="380"
+        fill="#ffffff" stroke="#b2bec3" stroke-width="2"/>
+
+  <!-- Editor description — multi-line tspan example -->
+  <text id="editorHint"
+        x="230" y="155"
+        font-family="Courier New, monospace" font-size="13px" fill="#636e72">
+    <tspan x="230" dy="0">// Start editing here.</tspan>
+    <tspan x="230" dy="18">// Use Ctrl+S to save your work.</tspan>
+  </text>
+
+  <!-- ── Status bar ───────────────────────────────────────────────────── -->
+  <rect id="statusBar" x="220" y="515" width="550" height="55"
+        style="fill:rgba(44,62,80,0.95)"/>
+
+  <rect id="statusLabel"    x="230" y="525" width="200" height="35"
+        fill="#3498db" fill-opacity="0.8"/>
+  <rect id="statusProgress" x="450" y="525" width="300" height="35"
+        fill="#27ae6080"/>
+
+  <!-- Status text -->
+  <text id="lblStatus"
+        x="240" y="548"
+        font-family="Arial" font-size="12px" fill="white">
+    Ready
+  </text>
+
+  <!-- Italic caption at very bottom – font-style demo -->
+  <text id="lblVersion"
+        x="650" y="548"
+        font-family="Arial" font-size="10px"
+        style="fill:#bdc3c7;font-style:italic;text-anchor:end">
+    v1.0.0
+  </text>
+
+</svg>

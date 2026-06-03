@@ -1,0 +1,15 @@
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+
+ <g>
+  <title>Layer 1</title>
+  <rect id="svg_1" height="394" width="557" y="82" x="112" stroke="#000" fill="#fff"/>
+  <rect id="svg_2" height="130" width="183" y="137" x="167" stroke="#000" fill="#fff"/>
+  <rect id="svg_3" height="130" width="224" y="137" x="393" stroke="#000" fill="#fff"/>
+  <rect id="svg_4" height="143" width="251" y="298" x="167" stroke="#000" fill="#fff"/>
+  <rect id="svg_5" height="141" width="173" y="300" x="441" stroke="#000" fill="#fff"/>
+  <text xml:space="preserve" text-anchor="start" font-family="Noto Sans JP" font-size="24" id="svg_6" y="195" x="203" stroke-width="0" stroke="#000" fill="#000000">hello</text>
+  <text xml:space="preserve" text-anchor="start" font-family="Noto Sans JP" font-size="24" stroke-width="0" id="svg_7" y="196" x="462" stroke="#000" fill="#000000">hi</text>
+  <text xml:space="preserve" text-anchor="start" font-family="Noto Sans JP" font-size="24" stroke-width="0" id="svg_8" y="354" x="191" stroke="#000" fill="#000000">bats are cool</text>
+  <text xml:space="preserve" text-anchor="start" font-family="Noto Sans JP" font-size="24" id="svg_9" y="343" x="479" stroke="#000" fill="#fff">g</text>
+ </g>
+</svg>
