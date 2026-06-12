@@ -2,7 +2,7 @@ from typing import final
 
 from .treenode import TreeNode
 from .util import find_tightest_container
-from .svgmodel import SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement
 
 @final
 class HierarchyBuilder:
@@ -36,6 +36,12 @@ class HierarchyBuilder:
         if elem.svg_id:
             return _sanitise_qt_name(elem.svg_id)
         self._counter += 1
+        if isinstance(elem, TextElement):
+            prefix = "textEdit"
+        elif isinstance(elem, Rectangle) or isinstance(elem, Circle):
+            prefix = "widget"
+        else:
+            prefix = "unknown"
         prefix = "textEdit" if isinstance(elem, TextElement) else "widget"
         return f"{prefix}_{self._counter}"
 

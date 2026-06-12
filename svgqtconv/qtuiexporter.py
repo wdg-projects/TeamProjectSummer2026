@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 from .atom import FontStyle
 from .treenode import TreeNode
-from .svgmodel import Rectangle, SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement
 
 TMP_CHANGE_ROOT_CLASS = "QWidget"  # "QMainWindow"
 
@@ -47,8 +47,10 @@ class QtUIExporter:
         """Route to the correct emitter based on element type."""
         if isinstance(node.item, TextElement):
             self._emit_text_edit(parent_elem, node.unpack(TextElement))
-        else:
+        elif isinstance(node.item, Rectangle):
             self._emit_widget(parent_elem, node.unpack(Rectangle))
+        elif isinstance(node.item, Circle):
+            self._emit_circle_widget(parent_elem, node.unpack(Circle))
 
     # ── QWidget emitter (Rectangle) ───────────────────────────────────────────
 
@@ -66,6 +68,24 @@ class QtUIExporter:
 
         for child in node.children:
             self._emit_node(widget_elem, child)
+    
+    # -- QWidget emitter (Circle) ----------------------------------------------
+
+    def _emit_circle_widget(self, parent_elem: ET.Element, node: TreeNode[Circle]) -> None:
+        css = self._circle_stylesheet(node.item)
+
+        widget_elem = (
+            elem("widget",
+                self._geometry_elem(node),
+                self._stylesheet_elem(css),
+                name=node.qt_name,
+                **{"class": "QWidget"}
+            )
+        )(parent_elem)
+
+        for child in node.children:
+            self._emit_node(widget_elem, child)
+
 
     # ── QLabel emitter (TextElement) ───────────────────────────────────────
 
@@ -147,6 +167,24 @@ class QtUIExporter:
         if rect.stroke_color:
             w = max(1, round(rect.stroke_width))
             parts["border"] = f"{w}px solid {rect.stroke_color.to_css()}"
+
+        return " ".join(f"{k}: {v};" for k, v in parts.items())
+
+    @staticmethod
+    def _circle_stylesheet(circle: Circle) -> str:
+        """
+        Build a Qt stylesheet string from a Circle's fill/stroke.
+        """
+        parts: dict[str, str] = {}
+
+        if circle.fill_color:
+            parts["background-color"] = circle.fill_color.to_css()
+
+        if circle.stroke_color:
+            w = max(1, round(circle.stroke_width))
+            parts["border"] = f"{w}px solid {circle.stroke_color.to_css()}"
+        
+        parts["border-radius"] = str(circle.radius) + "px"
 
         return " ".join(f"{k}: {v};" for k, v in parts.items())
 

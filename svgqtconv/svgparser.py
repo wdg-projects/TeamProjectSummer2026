@@ -4,7 +4,7 @@ from typing import IO, Callable
 import xml.etree.ElementTree as ET
 
 from .atom import Color, ColorParser, FontParser
-from .svgmodel import Rectangle, SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement
 
 _RE_STYLE_PROP = re.compile(r"([\w-]+)\s*:\s*([^;]+)")
 
@@ -47,6 +47,10 @@ class SVGParser:
                 t = self._parse_text(elem)
                 if t:
                     elements.append(t)
+            elif local == "circle":
+                c = self._parse_circle(elem)
+                if c:
+                    elements.append(c)
 
         return elements
 
@@ -132,6 +136,28 @@ class SVGParser:
         return Rectangle(x=x, y=y, width=width, height=height, svg_id=svg_id,
                          fill_color=fill_color, stroke_color=stroke_color,
                          stroke_width=stroke_width)
+
+    # -- <circle> parser -------------------------------------------------------
+
+    def _parse_circle(self, elem: ET.Element) -> Circle | None:
+        cx = self._to_float(elem.get("cx", "0"))
+        cy = self._to_float(elem.get("cy", "0"))
+        radius = self._to_float(elem.get("r", "0"))
+        svg_id = elem.get("id")
+
+        if radius <= 0:
+            return None
+        
+        prop_fn      = self._make_prop_fn(elem)
+        fill_color   = ColorParser.parse(prop_fn("fill"))
+        stroke_color = ColorParser.parse(prop_fn("stroke"))
+        stroke_width = self._to_float(prop_fn("stroke-width"), 0.0)
+        fill_color, stroke_color = self._apply_opacity(fill_color, stroke_color, prop_fn)
+        return Circle(x=cx-radius, y=cy-radius, width=2*radius, height=2*radius,
+                      cx=cx, cy=cy, radius=radius, svg_id=svg_id,
+                      fill_color=fill_color, stroke_color=stroke_color,
+                      stroke_width=stroke_width)
+
 
     # ── <text> parser ─────────────────────────────────────────────────────────
 

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import statistics
 from typing import override
 
 from .atom import Color, FontStyle
@@ -43,6 +44,30 @@ class Rectangle(BoxElement):
                 f"w={self.width}, h={self.height}{fill}{strk})")
 
 @dataclass(frozen=True, repr=False)
+class Circle(BoxElement):
+    """
+    An SVG <circle> -> becomes a square QWidget with fully rounded corners
+    OR a QRadioButton if it's small enough and accompanied by text.
+    All coordinates are absolute SVG viewport space.
+    """
+    cx: float
+    cy: float
+    radius: float
+
+    svg_id: str | None = None
+    fill_color: Color | None = None
+    stroke_color: Color | None = None
+    stroke_width: float = 0.0
+    
+    @override
+    def __repr__(self) -> str:
+        tag  = f"id={self.svg_id!r}" if self.svg_id else "no id"
+        fill = f" fill={self.fill_color.to_hex()}"    if self.fill_color   else ""
+        strk = (f" stroke={self.stroke_color.to_hex()}@{self.stroke_width}px"
+                if self.stroke_color else "")
+        return (f"Circle({tag}, x={self.cx},y={self.cy}, r={self.radius}{fill}{strk}")
+
+@dataclass(frozen=True, repr=False)
 class TextElement(BoxElement):
     """
     An SVG <text> (or <text>/<tspan>) → becomes a QLabel in the .ui file.
@@ -69,5 +94,5 @@ class TextElement(BoxElement):
                 f"w={self.width:.0f}, h={self.height:.0f}, "
                 f"text={preview!r}, {self.font})")
 
-type SVGElement = Rectangle | TextElement
+type SVGElement = Rectangle | TextElement | Circle
 

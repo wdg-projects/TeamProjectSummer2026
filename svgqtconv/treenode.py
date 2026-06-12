@@ -1,13 +1,13 @@
 from typing import Generic, TypeVar, cast, override
 
-from .svgmodel import SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement
 
 TElement = TypeVar("TElement", bound=SVGElement, covariant=True)
 class TreeNode(Generic[TElement]):
     """
     One node in the Qt widget tree.
 
-    item      - the underlying SVGElement (Rectangle or TextElement)
+    item      - the underlying SVGElement (Rectangle, TextElement or Circle)
     qt_name   - QWidget objectName in the .ui file
     children  - child TreeNodes (always empty for TextElement nodes)
     parent    - reference to parent TreeNode, None → direct child of central
@@ -51,5 +51,12 @@ class TreeNode(Generic[TElement]):
 
     @override
     def __repr__(self) -> str:
-        kind = "text" if isinstance(self.item, TextElement) else "rect"
+        if isinstance(self.item, TextElement):
+            kind = "text"
+        elif isinstance(self.item, Rectangle):
+            kind = "rect"
+        elif isinstance(self.item, Circle):
+            kind = "circle"
+        else:
+            kind = "idk"
         return f"TreeNode({kind}, name={self.qt_name!r}, children={len(self.children)})"
