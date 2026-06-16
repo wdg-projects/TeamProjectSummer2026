@@ -1,15 +1,14 @@
-from collections.abc import AsyncGenerator, AsyncIterator, Iterator
-import enum
-import functools
 import io
 import os
 import re
 import sys
-import traceback
-from typing import cast, final, override
+import enum
+import functools
 from dataclasses import dataclass
-from PyQt6.QtCore import QObject
+from typing import cast, final, override
+from collections.abc import AsyncGenerator
 
+from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QLabel, QPushButton, QTextEdit, QWidget
 import ollama
 
@@ -74,6 +73,10 @@ def ensure() -> None:
     if os.system("OLLAMA_HOST=127.0.0.1:12588 ollama create com_teamproject_uiassistant__deepseek -f Modelfile"):
         raise ValueError("Could not create model")
 
+    _ = os.system("OLLAMA_HOST=127.0.0.1:12588 ollama rm com_teamproject_uiassistant__qwen3")
+    if os.system("OLLAMA_HOST=127.0.0.1:12588 ollama create com_teamproject_uiassistant__qwen3 -f Modelfile-new"):
+        raise ValueError("Could not create model")
+
 class MessageSource(enum.StrEnum):
     USER = "User"
     ASSISTANT = "Assistant"
@@ -98,8 +101,6 @@ change_widget_type(src: QWidget, target_type: type[QWidget]) -> None
 delete_widget(src: QWidget) -> None
   Removes a widget from the tree.
 """
-
-# TODO: All this is technically incorrect and Qt stuff is being accessed from the wrong thread, oops!
 
 def extract_widget_text(w: QWidget) -> str | None:
     if isinstance(w, QLabel):
