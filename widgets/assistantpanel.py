@@ -207,7 +207,7 @@ class AssistantChatModel(QAbstractTableModel):
 
     @override
     def rowCount(self, parent: QModelIndex | None = None) -> int:
-        return len([x for x in self.log])
+        return len(self.log)
 
     @override
     def columnCount(self, parent: QModelIndex | None = None) -> int:
@@ -215,19 +215,16 @@ class AssistantChatModel(QAbstractTableModel):
 
     @override
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+        res = None
         if role == Qt.ItemDataRole.DisplayRole:
             try:
-                msg = [x for x in self.log][index.row()]
+                msg = self.log[index.row()]
             except IndexError:
                 return QVariant()
             if index.column() == 0:
                 res = str("".join(f"{x}\u200b" for x in msg.content))
             elif index.column() == 1:
                 res = str(msg.source.ollama_role())
-            else:
-                res = None
-        else:
-            res = None
         return QVariant(res)
 
     def append(self, item: toolchat.ChatMessage) -> None:
@@ -235,8 +232,7 @@ class AssistantChatModel(QAbstractTableModel):
 
     def extend(self, other: collections.abc.Iterable[toolchat.ChatMessage]) -> None:
         other = list(other)
-        other_visible = [x for x in other]
 
-        self.beginInsertRows(QModelIndex(), len(self.log), len(self.log) + len(other_visible) - 1)
+        self.beginInsertRows(QModelIndex(), len(self.log), len(self.log) + len(other) - 1)
         self.log.extend(other)
         self.endInsertRows()
