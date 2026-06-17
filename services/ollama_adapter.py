@@ -1,15 +1,11 @@
-from collections.abc import AsyncGenerator, AsyncIterator, Iterator
-import enum
-import functools
 import io
 import os
-import re
 import sys
-import traceback
-from typing import cast, final, override
+import functools
 from dataclasses import dataclass
-from PyQt6.QtCore import QObject
+from typing import final, override
 
+from PyQt6.QtCore import QObject
 from PyQt6.QtWidgets import QLabel, QPushButton, QTextEdit, QWidget
 import ollama
 
@@ -74,14 +70,9 @@ def ensure() -> None:
     if os.system("OLLAMA_HOST=127.0.0.1:12588 ollama create com_teamproject_uiassistant__deepseek -f Modelfile"):
         raise ValueError("Could not create model")
 
-class MessageSource(enum.StrEnum):
-    USER = "User"
-    ASSISTANT = "Assistant"
-    COMPUTER = "Computer"
-
-type ToolMessage = tuple[MessageSource, str]
-
-TRIGGER_PHRASE = re.compile(r"computer,\s+run:\s+```.*\n([\s\S]*?)```", re.IGNORECASE)
+    _ = os.system("OLLAMA_HOST=127.0.0.1:12588 ollama rm com_teamproject_uiassistant__qwen3")
+    if os.system("OLLAMA_HOST=127.0.0.1:12588 ollama create com_teamproject_uiassistant__qwen3 -f Modelfile-new"):
+        raise ValueError("Could not create model")
 
 ASSISTANT_FAKE_DOCS_PROMPT = "Computer, run: ```\nprint(ui_documentation())\n```"
 COMPUTER_FAKE_DOCS_RSP = """
@@ -98,8 +89,6 @@ change_widget_type(src: QWidget, target_type: type[QWidget]) -> None
 delete_widget(src: QWidget) -> None
   Removes a widget from the tree.
 """
-
-# TODO: All this is technically incorrect and Qt stuff is being accessed from the wrong thread, oops!
 
 def extract_widget_text(w: QWidget) -> str | None:
     if isinstance(w, QLabel):
@@ -180,70 +169,3 @@ def run_script(script: str, edited_subwindow: EditedSubwindow | None) -> str:
         del e
     sys.stdout, sys.stderr = old
     return tgt.getvalue()
-
-
-async def tool_chat(model: str, log: list[ToolMessage], edited_subwindow: EditedSubwindow | None) -> AsyncGenerator[list[ToolMessage] | str, str | None]:
-    # Absolute goddamn mess, but this is merely for testing
-    log = log.copy()
-    start_len = len(log)
-
-    client = ollama_client()
-
-    PREFIX = {
-        MessageSource.USER: "[User says:] ",
-        MessageSource.ASSISTANT: "",
-        MessageSource.COMPUTER: "[Responding to the assistant, computer says:] "
-    }
-    chatlog: list[ollama.Message] = [ollama.Message(role="user", content="[A new user has logged in. Your role as assistant begins now.]")]
-    for x in log:
-        role = "assistant" if x[0] is MessageSource.ASSISTANT else "user"
-        chatlog.append(ollama.Message(role=role, content=(PREFIX[x[0]] + x[1]).strip()))
-
-    chatlog.append(ollama.Message(role="assistant", content=(PREFIX[MessageSource.ASSISTANT] + ASSISTANT_FAKE_DOCS_PROMPT).strip()))
-    chatlog.append(ollama.Message(role="user", content=(PREFIX[MessageSource.COMPUTER] + COMPUTER_FAKE_DOCS_RSP).strip()))
-
-    while True:
-        contents = ""
-        print("===== Begin fetch response")
-        async for x in await client.chat(model, chatlog, stream=True):
-            if x.message.content is not None:
-                contents += x.message.content
-            if x.message.thinking is not None:
-                print(x.message.thinking, end="")
-        print("\n===== End fetch response")
-
-        # Remove the two fake messages as they seem to make the AI go in loops
-        del chatlog[-1]
-        del chatlog[-1]
-
-        print(contents)
-
-        computer_response: str | None = None
-        full_match: str | None = None
-        for match in TRIGGER_PHRASE.finditer(contents):
-            full_match = match.group(0)
-            code = cast(str, match.group(1))
-            computer_response = yield code
-            if computer_response is None:
-                computer_response = "RuntimeError: The user has aborted the operation."
-
-        if computer_response is None or full_match is None:
-            chatlog.append(ollama.Message(role="assistant", content=contents))
-            log.append((MessageSource.ASSISTANT, contents))
-            break
-        chatlog.append(ollama.Message(role="assistant", content=full_match))
-        log.append((MessageSource.ASSISTANT, full_match))
-
-        if len(computer_response) > 1024:
-            text = f"RuntimeError: Your script generated overlong output: {len(computer_response)}B. Please ask me again, assistant, but limiting your script's output length."
-        elif computer_response.strip():
-            text = computer_response
-        else:
-            text = f"[Responding to the assistant, computer says:] ```runner.py:1:1: UserWarning: your script successfully finished, but generated no stdout / stderr; did you forget to print()?  analyze the exit condition of your script to figure out if this is correct!```"
-
-        print("SCRIPT RESPONSE", text)
-
-        chatlog.append(ollama.Message(role="user", content=f"[Responding to the assistant, computer says:] ```\n{text}\n```"))
-        log.append((MessageSource.COMPUTER, text))
-
-    yield log[start_len:]
