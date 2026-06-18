@@ -11,7 +11,7 @@ _RE_STYLE_PROP = re.compile(r"([\w-]+)\s*:\s*([^;]+)")
 # Height multiplier applied to font size to derive the widget bounding box
 # when no explicit width/height is given in the SVG.
 _TEXT_HEIGHT_FACTOR = 1.6   # line-height ~= font-size * 1.6
-_TEXT_WIDTH_PER_PT  = 0.65  # rough average character width relative to pt size
+_TEXT_WIDTH_PER_PT  = 0.8  # rough average character width relative to pt size
 
 class SVGParser:
     """
@@ -222,8 +222,8 @@ class SVGParser:
 
         # Estimate width from character count when not explicit.
         char_count  = max(len(line) for line in content.splitlines() or [""])
-        est_width   = max(60.0, char_count * font.point_size * _TEXT_WIDTH_PER_PT)
-        est_height  = max(20.0,
+        est_width   = max(10.0, char_count * font.point_size * _TEXT_WIDTH_PER_PT)
+        est_height  = max(10.0,
                           len(content.splitlines()) * font_size_px * _TEXT_HEIGHT_FACTOR)
 
         width  = self._to_float(elem.get("width"),  est_width)
