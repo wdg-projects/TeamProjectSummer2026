@@ -61,4 +61,4 @@ class TreeNode(Generic[TElement]):
             kind = "button"
         else:
             kind = "idk"
-        return f"TreeNode({kind}, name={self.qt_name!r}, children={len(self.children)})"
+        return f"TreeNode({kind}, name={self.qt_name!r}, children={len(self.children)}, parent={self.parent})"
