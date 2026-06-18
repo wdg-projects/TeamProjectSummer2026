@@ -213,13 +213,6 @@ class SVGParser:
         if not content:
             return None   # empty <text> – skip
 
-        # ── Geometry ──────────────────────────────────────────────────────────
-        anchor_x = self._to_float(elem.get("x", "0"))
-        anchor_y = self._to_float(elem.get("y", "0"))
-
-        # SVG y is the baseline; Qt needs the top-left corner.
-        top_y = anchor_y - font_size_px * 1.1   # ≈ cap-height above baseline
-
         # Estimate width from character count when not explicit.
         char_count  = max(len(line) for line in content.splitlines() or [""])
         est_width   = max(10.0, char_count * font.point_size * _TEXT_WIDTH_PER_PT)
@@ -229,8 +222,13 @@ class SVGParser:
         width  = self._to_float(elem.get("width"),  est_width)
         height = self._to_float(elem.get("height"), est_height)
 
+        # ── Geometry ──────────────────────────────────────────────────────────
+
+        anchor_x = self._to_float(elem.get("x", "0")) - 5
+        anchor_y = self._to_float(elem.get("y", "0")) - height
+
         return TextElement(
-            x=anchor_x, y=top_y,
+            x=anchor_x, y=anchor_y,
             width=width, height=height,
             content=content,
             svg_id=svg_id,

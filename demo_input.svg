@@ -116,9 +116,9 @@
 
   <!-- Italic caption at very bottom – font-style demo -->
   <text id="lblVersion"
-        x="190" y="570"
+        x="169" y="570"
         font-family="Arial" font-size="10px"
-        style="fill:#bdc3c7;font-style:italic;text-anchor:end">
+        style="fill:#bdc3c7;font-style:italic;">
     v1.0.0
   </text>
 
