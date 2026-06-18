@@ -1,6 +1,6 @@
 from typing import Generic, TypeVar, cast, override
 
-from .svgmodel import Circle, Rectangle, SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement, Button
 
 TElement = TypeVar("TElement", bound=SVGElement, covariant=True)
 class TreeNode(Generic[TElement]):
@@ -57,6 +57,8 @@ class TreeNode(Generic[TElement]):
             kind = "rect"
         elif isinstance(self.item, Circle):
             kind = "circle"
+        elif isinstance(self.item, Button):
+            kind = "button"
         else:
             kind = "idk"
         return f"TreeNode({kind}, name={self.qt_name!r}, children={len(self.children)})"
