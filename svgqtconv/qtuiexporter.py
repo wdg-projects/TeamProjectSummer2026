@@ -93,7 +93,6 @@ class QtUIExporter:
     def _emit_button(self, parent_elem: ET.Element, node: TreeNode[Button]) -> None:
         
         css = self._button_stylesheet(node.item)
-        print(node.item)
         widget_elem = (
             elem("widget",
                 self._geometry_elem(node),
@@ -104,7 +103,6 @@ class QtUIExporter:
                 **{"class": "QPushButton"}
             )
         )(parent_elem)
-        print(widget_elem[0][0])
         for child in node.children:
             self._emit_node(widget_elem, child)
 

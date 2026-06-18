@@ -31,8 +31,6 @@ class HierarchyBuilder:
                 roots.append(node)
             else:
                 parent = elem_to_node[id(parent_elem)]
-                print("Node: " + str(node.item))
-                print("Parent: " + str(parent.item))
                 if (isinstance(node.item, TextElement)
                     and isinstance(parent.item, Rectangle)
                     and parent.item.width > parent.item.height
