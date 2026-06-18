@@ -1,13 +1,12 @@
 import collections.abc
 from dataclasses import dataclass, field
-import enum
 from typing import cast, override
 
 from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QObject, QVariant, Qt, pyqtSlot
 from PyQt6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QWidget
 
 from asyncbridge import AsyncTask
-from services import ollama_adapter
+from services import ollama_adapter, toolchat
 from edited_subwindow import EditedSubwindow
 from widgets.modeldownload import ModelDownload
 from common_utils import TypedSignal, typed_signal, typed_slot
@@ -62,14 +61,14 @@ class AssistantPanelController(QObject):
 
     @dataclass
     class WaitForOllamaResponseState:
-        msg_mgr: AsyncTask[str | list[ollama_adapter.ToolMessage]]
-        chat_iter: collections.abc.AsyncGenerator[str | list[ollama_adapter.ToolMessage], str | None]
+        msg_mgr: AsyncTask[toolchat.Script | toolchat.ResponseFragment]
+        chat_iter: collections.abc.AsyncGenerator[toolchat.Script | toolchat.ResponseFragment, str | None]
 
     type State = StartState | WaitForModelVerifiedState | WaitForUserMessageState | WaitForOllamaResponseState
 
     state: State = StartState()
 
-    new_messages: TypedSignal[list[ollama_adapter.ToolMessage]] = typed_signal(list)
+    new_messages: TypedSignal[list[toolchat.ChatMessage]] = typed_signal(list)
 
     def __init__(self, model: AssistantChatModel, view: AssistantPanel, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -114,7 +113,7 @@ class AssistantPanelController(QObject):
     def ensure_model(self) -> None:
         assert isinstance(self.state, (self.WaitForModelVerifiedState, self.StartState))
 
-        mdl_mgr = AsyncTask(ollama_adapter.get_missing_models({"deepseek-r1:latest", "llama3.1:latest"}))
+        mdl_mgr = AsyncTask(ollama_adapter.get_missing_models({"deepseek-r1:latest", "qwen3:latest"}))
         _ = mdl_mgr.complete.connect(self.model_tested)
         _ = mdl_mgr.thrown.connect(self.model_test_error)
         mdl_mgr.start()
@@ -156,17 +155,17 @@ class AssistantPanelController(QObject):
                 assert False
 
     @typed_slot(list)
-    def on_new_message(self, msgs: list[ollama_adapter.ToolMessage]) -> None:
+    def on_new_message(self, msgs: list[toolchat.ChatMessage]) -> None:
         self.model.extend(msgs)
 
     def on_send(self) -> None:
         if not isinstance(self.state, self.WaitForUserMessageState):
             return
 
-        msg = (ollama_adapter.MessageSource.USER, self.view.ui.entry.text())
+        msg = toolchat.ChatMessage(toolchat.ChatMessageSource.USER, self.view.ui.entry.text())  # (ollama_adapter.MessageSource.USER, self.view.ui.entry.text())
         self.new_messages.emit([msg])
 
-        chat_iter = ollama_adapter.tool_chat("com_teamproject_uiassistant__deepseek", self.model.log, self.edited_subwindow)
+        chat_iter = toolchat.script_chat("com_teamproject_uiassistant__qwen3", self.model.log)
         msg_mgr = AsyncTask(chat_iter.asend(None))
 
         msg_mgr.complete.connect(self.on_model_response_fragment)
@@ -176,19 +175,19 @@ class AssistantPanelController(QObject):
 
     @pyqtSlot(object)
     def on_model_response_fragment(self, rsp: object) -> None:
-        rsp = cast(str | list[ollama_adapter.ToolMessage], rsp)
+        rsp = cast(toolchat.ResponseFragment | toolchat.Script, rsp)
         if not isinstance(self.state, self.WaitForOllamaResponseState):
             return
 
-        if isinstance(rsp, str):
+        if not rsp[0]:
             btn = QMessageBox.warning(self.view,
                 "The model wants to execute a script",
-                rsp,
+                rsp[1],
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel
             )
             if btn == QMessageBox.StandardButton.Ok:
-                res = ollama_adapter.run_script(rsp, self.edited_subwindow)
+                res = ollama_adapter.run_script(rsp[1], self.edited_subwindow)
             else:
                 res = None
             msg_mgr = AsyncTask(self.state.chat_iter.asend(res))
@@ -196,11 +195,11 @@ class AssistantPanelController(QObject):
             msg_mgr.start()
             return self.change_state(self.WaitForOllamaResponseState(msg_mgr, self.state.chat_iter))
 
-        self.new_messages.emit(rsp)
+        self.new_messages.emit([toolchat.ChatMessage(toolchat.ChatMessageSource.ASSISTANT, rsp[1])])
         self.change_state(self.WaitForUserMessageState())
 
 class AssistantChatModel(QAbstractTableModel):
-    log: list[ollama_adapter.ToolMessage]
+    log: list[toolchat.ChatMessage]
 
     def __init__(self, parent: QObject | None) -> None:
         super().__init__(parent)
@@ -208,7 +207,7 @@ class AssistantChatModel(QAbstractTableModel):
 
     @override
     def rowCount(self, parent: QModelIndex | None = None) -> int:
-        return len([x for x in self.log if x[0] != ollama_adapter.MessageSource.COMPUTER])
+        return len(self.log)
 
     @override
     def columnCount(self, parent: QModelIndex | None = None) -> int:
@@ -216,28 +215,24 @@ class AssistantChatModel(QAbstractTableModel):
 
     @override
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> object:
+        res = None
         if role == Qt.ItemDataRole.DisplayRole:
             try:
-                msg = [x for x in self.log if x[0] != ollama_adapter.MessageSource.COMPUTER][index.row()]
+                msg = self.log[index.row()]
             except IndexError:
                 return QVariant()
             if index.column() == 0:
-                res = str("".join(f"{x}\u200b" for x in msg[1]))
+                res = str("".join(f"{x}\u200b" for x in msg.content))
             elif index.column() == 1:
-                res = str(msg[0])
-            else:
-                res = None
-        else:
-            res = None
+                res = str(msg.source.ollama_role())
         return QVariant(res)
 
-    def append(self, item: ollama_adapter.ToolMessage) -> None:
+    def append(self, item: toolchat.ChatMessage) -> None:
         self.extend([item])
 
-    def extend(self, other: collections.abc.Iterable[ollama_adapter.ToolMessage]) -> None:
+    def extend(self, other: collections.abc.Iterable[toolchat.ChatMessage]) -> None:
         other = list(other)
-        other_visible = [x for x in other if x[0] != ollama_adapter.MessageSource.COMPUTER]
 
-        self.beginInsertRows(QModelIndex(), len(self.log), len(self.log) + len(other_visible) - 1)
+        self.beginInsertRows(QModelIndex(), len(self.log), len(self.log) + len(other) - 1)
         self.log.extend(other)
         self.endInsertRows()
