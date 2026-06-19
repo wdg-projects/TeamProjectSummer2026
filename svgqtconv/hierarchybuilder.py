@@ -1,4 +1,4 @@
-from typing import final
+from typing import final, cast
 
 from .treenode import TreeNode
 from .util import find_tightest_container
@@ -31,11 +31,9 @@ class HierarchyBuilder:
                 roots.append(node)
             else:
                 parent = elem_to_node[id(parent_elem)]
-                if (isinstance(node.item, TextElement)
-                    and isinstance(parent.item, Rectangle)
-                    and parent.item.width > parent.item.height
-                    and parent_elem.height <= node.item.font.point_size * 10):
-                    
+                if _are_a_button(node, parent):
+                    node = cast(TreeNode[TextElement], node)
+                    parent = cast(TreeNode[Rectangle], parent)
                     new_button = Button.from_rect_and_text(parent.item, node.item)
                     new_button = TreeNode(new_button, self._make_name(new_button))
                     elem_to_node[id(new_button)] = new_button
@@ -44,7 +42,6 @@ class HierarchyBuilder:
                         roots.append(new_button)
                     else:
                         new_parent.add_child(new_button)
-                    
                     del node.parent
                     del node
                 else:
@@ -66,8 +63,16 @@ class HierarchyBuilder:
             prefix = "idk"
         return f"{prefix}_{self._counter}"
 
+    
+
 def _sanitise_qt_name(name: str) -> str:
     s = "".join(c if (c.isalnum() or c == "_") else "_" for c in name)
     if s and s[0].isdigit():
         s = "w_" + s
     return s or "widget"
+
+def _are_a_button(node: TreeNode[SVGElement], parent: TreeNode[SVGElement]) -> bool:
+    return (isinstance(node.item, TextElement)
+            and isinstance(parent.item, Rectangle)
+            and parent.item.width > parent.item.height
+            and parent.item.height <= node.item.font.point_size * 10)
