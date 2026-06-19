@@ -2,8 +2,8 @@ import collections.abc
 from dataclasses import dataclass, field
 from typing import cast, override
 
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QObject, QVariant, Qt, pyqtSlot, QRect
-from PyQt6.QtGui import QPalette, QPainter, QColor, QFont
+from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QObject, QSize, QVariant, Qt, pyqtSlot, QRect
+from PyQt6.QtGui import QFontMetrics, QPalette, QPainter, QColor, QFont
 from PyQt6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QWidget, QStyledItemDelegate, \
     QItemDelegate, QStyleOptionViewItem
 
@@ -49,31 +49,49 @@ class AssistantPanel(QWidget):
 
 class MyDelegate(QItemDelegate):
 
+    def fetch_details(self, index: QModelIndex) -> tuple[QColor, QFont, str]:
+        contents = index.data()  # pyright: ignore[reportAny]
+        assert isinstance(contents, str)
+        role = index.siblingAtColumn(1).data()  # pyright: ignore[reportAny]
+        assert isinstance(role, str)
+        if role == 'user':
+            return QColor(255, 0, 0), QFont("Comic Sans MS", 12), contents
+        if role == 'assistant':
+            return QColor(0, 255, 0), QFont("Arial", 12), contents
+        assert False
+
     @override
-    def paint(self, painter: QPainter | None, option: object, index: QModelIndex) -> None:
+    def sizeHint(self, option: 'QStyleOptionViewItem', index: QModelIndex) -> QSize:
+        _, fnt, txt = self.fetch_details(index)
+        flags = Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignCenter
+        rect = QFontMetrics(fnt).boundingRect(4, 0, option.rect.width() - 8, 99999999, flags, txt)
+        rect.setHeight(rect.height() + 12)
+        return rect.size()
+
+    @override
+    def paint(self, painter: QPainter | None, option: QStyleOptionViewItem, index: QModelIndex) -> None:
         if painter is None:
             return
-        contents = index.data()
-        role = index.siblingAtColumn(1).data()
-        if (role == 'user'):
-            painter.setPen(QColor(255, 0, 0))
-            painter.setFont(QFont("Comic Sans MS", 12))
-        if (role == 'assistant'):
-            painter.setPen(QColor(0, 255, 0))
-            painter.setFont(QFont("Arial", 12))
+        col, fnt, txt = self.fetch_details(index)
+        painter.setPen(col)
+        painter.setFont(fnt)
 
-        if hasattr(option, 'rect'):
-            #we check is the object has attribute rect, if so we can use it
-            option_rect = option.rect
-        else:
-            # Default Fallback - if no attribute we use this as default
-            option_rect = QRect(0, 0, 300, 100)
-        flags = Qt.TextWordWrap | Qt.AlignCenter
-        bound_rect = painter.boundingRect(option_rect, flags, contents)
-        if bound_rect.width() > option_rect.width():
-            bound_rect.setWidth(option_rect.width())
-        painter.drawRoundedRect(bound_rect, 10, 10)
-        painter.drawText(bound_rect, flags, contents)
+        option_rect = option.rect
+        flags = Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignCenter
+
+        text_rect = QRect(option_rect.x(), option_rect.y(), option_rect.width(), option_rect.height())
+        # text_rect.setWidth(text_rect.width() - 5)
+        # text_rect.setX(text_rect.x() + 5)
+        text_rect.setY(text_rect.y() + 4)
+
+        bound_rect = painter.boundingRect(option_rect, flags, txt)
+        rounded_rect_rect = QRect(bound_rect)
+        rounded_rect_rect.setX(rounded_rect_rect.x() - 4)
+        rounded_rect_rect.setWidth(rounded_rect_rect.width() + 4)
+        rounded_rect_rect.setY(rounded_rect_rect.y() - 4)
+        rounded_rect_rect.setHeight(rounded_rect_rect.height() + 4)
+        painter.drawRoundedRect(rounded_rect_rect, 10, 10)
+        _ = painter.drawText(bound_rect, flags, txt)
 
 class AssistantPanelController(QObject):
     model: AssistantChatModel
