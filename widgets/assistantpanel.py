@@ -2,8 +2,10 @@ import collections.abc
 from dataclasses import dataclass, field
 from typing import cast, override
 
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QObject, QVariant, Qt, pyqtSlot
-from PyQt6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QWidget
+from PyQt6.QtCore import QAbstractTableModel, QModelIndex, QObject, QVariant, Qt, pyqtSlot, QRect
+from PyQt6.QtGui import QPalette, QPainter, QColor, QFont
+from PyQt6.QtWidgets import QApplication, QLineEdit, QListView, QMessageBox, QPushButton, QWidget, QStyledItemDelegate, \
+    QItemDelegate, QStyleOptionViewItem
 
 from asyncbridge import AsyncTask
 from services import ollama_adapter, toolchat
@@ -23,6 +25,7 @@ class UI_AssistantPanel:
     entry: QLineEdit
     send: QPushButton
 
+
 class AssistantPanel(QWidget):
     ui: UI_AssistantPanel
 
@@ -39,7 +42,38 @@ class AssistantPanel(QWidget):
         self.ui.chat_log.setWordWrap(True)
         self.ui.entry.setEnabled(False)
 
+        delegate: MyDelegate = MyDelegate()
+        self.ui.chat_log.setItemDelegate(delegate)
+
         self.controller = AssistantPanelController(model, self, self)
+
+class MyDelegate(QItemDelegate):
+
+    @override
+    def paint(self, painter: QPainter | None, option: object, index: QModelIndex) -> None:
+        if painter is None:
+            return
+        contents = index.data()
+        role = index.siblingAtColumn(1).data()
+        if (role == 'user'):
+            painter.setPen(QColor(255, 0, 0))
+            painter.setFont(QFont("Comic Sans MS", 12))
+        if (role == 'assistant'):
+            painter.setPen(QColor(0, 255, 0))
+            painter.setFont(QFont("Arial", 12))
+
+        if hasattr(option, 'rect'):
+            #we check is the object has attribute rect, if so we can use it
+            option_rect = option.rect
+        else:
+            # Default Fallback - if no attribute we use this as default
+            option_rect = QRect(0, 0, 300, 100)
+        flags = Qt.TextWordWrap | Qt.AlignCenter
+        bound_rect = painter.boundingRect(option_rect, flags, contents)
+        if bound_rect.width() > option_rect.width():
+            bound_rect.setWidth(option_rect.width())
+        painter.drawRoundedRect(bound_rect, 10, 10)
+        painter.drawText(bound_rect, flags, contents)
 
 class AssistantPanelController(QObject):
     model: AssistantChatModel
