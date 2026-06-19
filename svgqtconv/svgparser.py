@@ -4,14 +4,14 @@ from typing import IO, Callable
 import xml.etree.ElementTree as ET
 
 from .atom import Color, ColorParser, FontParser
-from .svgmodel import Rectangle, SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement
 
 _RE_STYLE_PROP = re.compile(r"([\w-]+)\s*:\s*([^;]+)")
 
 # Height multiplier applied to font size to derive the widget bounding box
 # when no explicit width/height is given in the SVG.
 _TEXT_HEIGHT_FACTOR = 1.6   # line-height ~= font-size * 1.6
-_TEXT_WIDTH_PER_PT  = 0.65  # rough average character width relative to pt size
+_TEXT_WIDTH_PER_PT  = 0.8  # rough average character width relative to pt size
 
 class SVGParser:
     """
@@ -47,6 +47,10 @@ class SVGParser:
                 t = self._parse_text(elem)
                 if t:
                     elements.append(t)
+            elif local == "circle":
+                c = self._parse_circle(elem)
+                if c:
+                    elements.append(c)
 
         return elements
 
@@ -133,6 +137,28 @@ class SVGParser:
                          fill_color=fill_color, stroke_color=stroke_color,
                          stroke_width=stroke_width)
 
+    # -- <circle> parser -------------------------------------------------------
+
+    def _parse_circle(self, elem: ET.Element) -> Circle | None:
+        cx = self._to_float(elem.get("cx", "0"))
+        cy = self._to_float(elem.get("cy", "0"))
+        radius = self._to_float(elem.get("r", "0"))
+        svg_id = elem.get("id")
+
+        if radius <= 0:
+            return None
+        
+        prop_fn      = self._make_prop_fn(elem)
+        fill_color   = ColorParser.parse(prop_fn("fill"))
+        stroke_color = ColorParser.parse(prop_fn("stroke"))
+        stroke_width = self._to_float(prop_fn("stroke-width"), 0.0)
+        fill_color, stroke_color = self._apply_opacity(fill_color, stroke_color, prop_fn)
+        return Circle(x=cx-radius, y=cy-radius, width=2*radius, height=2*radius,
+                      cx=cx, cy=cy, radius=radius, svg_id=svg_id,
+                      fill_color=fill_color, stroke_color=stroke_color,
+                      stroke_width=stroke_width)
+
+
     # ── <text> parser ─────────────────────────────────────────────────────────
 
     def _parse_text(self, elem: ET.Element) -> TextElement | None:
@@ -187,24 +213,22 @@ class SVGParser:
         if not content:
             return None   # empty <text> – skip
 
-        # ── Geometry ──────────────────────────────────────────────────────────
-        anchor_x = self._to_float(elem.get("x", "0"))
-        anchor_y = self._to_float(elem.get("y", "0"))
-
-        # SVG y is the baseline; Qt needs the top-left corner.
-        top_y = anchor_y - font_size_px * 1.1   # ≈ cap-height above baseline
-
         # Estimate width from character count when not explicit.
         char_count  = max(len(line) for line in content.splitlines() or [""])
-        est_width   = max(60.0, char_count * font.point_size * _TEXT_WIDTH_PER_PT)
-        est_height  = max(20.0,
+        est_width   = max(10.0, char_count * font.point_size * _TEXT_WIDTH_PER_PT)
+        est_height  = max(10.0,
                           len(content.splitlines()) * font_size_px * _TEXT_HEIGHT_FACTOR)
 
         width  = self._to_float(elem.get("width"),  est_width)
         height = self._to_float(elem.get("height"), est_height)
 
+        # ── Geometry ──────────────────────────────────────────────────────────
+
+        anchor_x = self._to_float(elem.get("x", "0")) - 5
+        anchor_y = self._to_float(elem.get("y", "0")) - height
+
         return TextElement(
-            x=anchor_x, y=top_y,
+            x=anchor_x, y=anchor_y,
             width=width, height=height,
             content=content,
             svg_id=svg_id,

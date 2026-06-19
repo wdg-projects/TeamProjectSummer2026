@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 
 from .atom import FontStyle
 from .treenode import TreeNode
-from .svgmodel import Rectangle, SVGElement, TextElement
+from .svgmodel import Circle, Rectangle, SVGElement, TextElement, Button
 
 TMP_CHANGE_ROOT_CLASS = "QWidget"  # "QMainWindow"
 
@@ -47,8 +47,12 @@ class QtUIExporter:
         """Route to the correct emitter based on element type."""
         if isinstance(node.item, TextElement):
             self._emit_text_edit(parent_elem, node.unpack(TextElement))
-        else:
+        elif isinstance(node.item, Rectangle):
             self._emit_widget(parent_elem, node.unpack(Rectangle))
+        elif isinstance(node.item, Circle):
+            self._emit_circle_widget(parent_elem, node.unpack(Circle))
+        elif isinstance(node.item, Button):
+            self._emit_button(parent_elem, node.unpack(Button))
 
     # ── QWidget emitter (Rectangle) ───────────────────────────────────────────
 
@@ -64,6 +68,41 @@ class QtUIExporter:
             )
         )(parent_elem)
 
+        for child in node.children:
+            self._emit_node(widget_elem, child)
+    
+    # -- QWidget emitter (Circle) ----------------------------------------------
+
+    def _emit_circle_widget(self, parent_elem: ET.Element, node: TreeNode[Circle]) -> None:
+        css = self._circle_stylesheet(node.item)
+
+        widget_elem = (
+            elem("widget",
+                self._geometry_elem(node),
+                self._stylesheet_elem(css),
+                name=node.qt_name,
+                **{"class": "QWidget"}
+            )
+        )(parent_elem)
+
+        for child in node.children:
+            self._emit_node(widget_elem, child)
+
+   # ── QButton emitter (Button) ───────────────────────────────────────────
+
+    def _emit_button(self, parent_elem: ET.Element, node: TreeNode[Button]) -> None:
+        
+        css = self._button_stylesheet(node.item)
+        widget_elem = (
+            elem("widget",
+                self._geometry_elem(node),
+                self._font_elem(node.item.font),
+                self._stylesheet_elem(css),
+                self._property_elem("text", elem("string", node.item.content)),
+                name=node.qt_name,
+                **{"class": "QPushButton"}
+            )
+        )(parent_elem)
         for child in node.children:
             self._emit_node(widget_elem, child)
 
@@ -151,6 +190,43 @@ class QtUIExporter:
         return " ".join(f"{k}: {v};" for k, v in parts.items())
 
     @staticmethod
+    def _circle_stylesheet(circle: Circle) -> str:
+        """
+        Build a Qt stylesheet string from a Circle's fill/stroke.
+        """
+        parts: dict[str, str] = {}
+
+        if circle.fill_color:
+            parts["background-color"] = circle.fill_color.to_css()
+
+        if circle.stroke_color:
+            w = max(1, round(circle.stroke_width))
+            parts["border"] = f"{w}px solid {circle.stroke_color.to_css()}"
+        
+        parts["border-radius"] = str(circle.radius) + "px"
+
+        return " ".join(f"{k}: {v};" for k, v in parts.items())
+
+    @staticmethod
+    def _button_stylesheet(button: Button) -> str:
+        """Build a Qt stylesheet string from a Buttons's fill/stroke and font properties."""
+        parts: dict[str, str] = {}
+
+        if button.fill_color:
+            parts["background-color"] = button.fill_color.to_css()
+
+        if button.stroke_color:
+            w = max(1, round(button.stroke_width))
+            parts["border"] = f"{w}px solid {button.stroke_color.to_css()}"
+        else:
+            parts["border"] = "none"
+        
+        if button.font.color:
+            parts["color"] = button.font.color.to_css()
+
+        return " ".join(f"{k}: {v};" for k, v in parts.items())
+
+    @staticmethod
     def _text_stylesheet(font: FontStyle) -> str:
         """
         Build a Qt stylesheet string for a QLabel.
@@ -159,9 +235,10 @@ class QtUIExporter:
         with whatever parent widget sits beneath it.  The text colour comes
         from the SVG fill attribute on the <text> element.
         """
-        parts = {"background-color": "transparent"}
+        parts = {"background-color": "transparent", "border": "none"}
         if font.color:
             parts["color"] = font.color.to_css()
+    
         return " ".join(f"{k}: {v};" for k, v in parts.items())
 
     @staticmethod
