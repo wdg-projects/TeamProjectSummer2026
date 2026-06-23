@@ -211,10 +211,13 @@ class AssistantPanelController(QObject):
         self.model.extend(msgs)
 
     def on_send(self) -> None:
+        self.manual_send(self.view.ui.entry.text())
+
+    def manual_send(self, text: str) -> None:
         if not isinstance(self.state, self.WaitForUserMessageState):
             return
 
-        msg = toolchat.ChatMessage(toolchat.ChatMessageSource.USER, self.view.ui.entry.text())  # (ollama_adapter.MessageSource.USER, self.view.ui.entry.text())
+        msg = toolchat.ChatMessage(toolchat.ChatMessageSource.USER, text)  # (ollama_adapter.MessageSource.USER, self.view.ui.entry.text())
         self.new_messages.emit([msg])
 
         chat_iter = toolchat.script_chat("com_teamproject_uiassistant__qwen3", self.model.log)

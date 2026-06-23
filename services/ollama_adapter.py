@@ -107,6 +107,11 @@ def run_script(script: str, edited_subwindow: EditedSubwindow | None) -> str:
             raise RuntimeError("Cannot fetch current UI: The user has not loaded a UI yet.")
         return edited_subwindow.contents
 
+    def _get_selected_widget() -> QWidget | None:
+        if edited_subwindow is None:
+            return None
+        return edited_subwindow.highlighted_widget
+
     def _all_text_widgets() -> dict[QWidget, str]:
         res: dict[QWidget, str] = {}
         def f(w: QWidget) -> None:
@@ -145,6 +150,7 @@ def run_script(script: str, edited_subwindow: EditedSubwindow | None) -> str:
     glob["all_text_widgets"] = _all_text_widgets
     glob["change_widget_type"] = _change_widget_type
     glob["delete_widget"] = _delete_widget
+    glob["get_selected_widget"] = _get_selected_widget
 
     old = sys.stdout, sys.stderr
     tgt = io.StringIO()
@@ -168,4 +174,6 @@ def run_script(script: str, edited_subwindow: EditedSubwindow | None) -> str:
         print(f"{type(e).__qualname__}: {e}", file=sys.stderr)
         del e
     sys.stdout, sys.stderr = old
+    if edited_subwindow is not None:
+        edited_subwindow.done()
     return tgt.getvalue()

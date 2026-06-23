@@ -9,6 +9,9 @@ The following global functions are also provided:
   get_ui() -> QWidget
     Returns the UI the user is editing.
 
+  get_selected_widget() -> QWidget | None
+    Returns the widget the user has requested the editing of, if it exists.
+
   all_text_widgets() -> dict[QWidget, str]
     Returns a dict of all widgets in the edited UI tree that have text.
 

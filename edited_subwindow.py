@@ -8,6 +8,7 @@ class EditedSubwindow(QObject):
     # path: str
     data: str
     contents: QWidget
+    highlighted_widget: QWidget | None = None
 
     def __init__(self, raw_data: bytes, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -16,3 +17,6 @@ class EditedSubwindow(QObject):
             # raw_data = f.read()
         self.data = raw_data.decode("utf8")
         self.contents = load_ui(QWidget, io.BytesIO(raw_data))
+
+    def done(self) -> None:
+        self.highlighted_widget = None
